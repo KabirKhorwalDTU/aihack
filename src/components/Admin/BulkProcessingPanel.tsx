@@ -31,7 +31,7 @@ const BulkProcessingPanel = () => {
     setLogs([]);
     setCurrentBatch(0);
 
-    const batchSize = 10000;
+    const batchSize = 1000;
     const concurrentBatches = 3;
     let offset = 0;
     let totalProcessed = 0;
