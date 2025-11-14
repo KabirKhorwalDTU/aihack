@@ -91,7 +91,7 @@ const BulkProcessingPanel = () => {
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-2">Bulk Review Processing</h2>
         <p className="text-sm text-gray-600">
-          Process all pending reviews with OpenAI to extract sentiment, topics, and priority
+          Process all pending reviews to extract sentiment, topics, and priority using intelligent keyword analysis
         </p>
       </div>
 
@@ -180,15 +180,15 @@ const BulkProcessingPanel = () => {
         </div>
       </div>
 
-      <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+      <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
         <div className="flex gap-3">
-          <AlertCircle className="text-yellow-600 flex-shrink-0" size={20} />
+          <CheckCircle className="text-blue-600 flex-shrink-0" size={20} />
           <div>
-            <p className="text-sm font-medium text-yellow-900 mb-1">Important Notes</p>
-            <ul className="text-xs text-yellow-800 space-y-1 list-disc list-inside">
-              <li>Processing uses OpenAI API and will incur costs based on usage</li>
-              <li>Each batch processes up to 1,000 reviews at a time with 50 parallel API calls</li>
-              <li>For 1 million reviews: ~1,000 batches, 30-60 minutes total</li>
+            <p className="text-sm font-medium text-blue-900 mb-1">Processing Information</p>
+            <ul className="text-xs text-blue-800 space-y-1 list-disc list-inside">
+              <li>Processing uses intelligent keyword-based analysis - completely free with no API costs</li>
+              <li>Each batch processes up to 1,000 reviews at a time with 50 parallel operations</li>
+              <li>For 1 million reviews: ~1,000 batches, 10-20 minutes total (faster than AI APIs)</li>
               <li>You can stop processing at any time and resume later</li>
               <li>Failed reviews can be retried by running the process again</li>
             </ul>

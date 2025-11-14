@@ -38,78 +38,35 @@ const VALID_TOPICS = [
   "Account Blocked"
 ];
 
-async function processReviewWithOpenAI(review: Review, openaiApiKey: string): Promise<TaggingResult> {
+async function processReviewWithDatabase(
+  review: Review,
+  supabaseClient: any
+): Promise<TaggingResult> {
   try {
-    const prompt = `You are an AI assistant specialized in analyzing customer feedback for a delivery/e-commerce platform.
-
-Analyze the following customer review and provide structured output:
-
-Review: "${review.review_text}"
-
-Provide your response in valid JSON format ONLY (no additional text before or after) with exactly these fields:
-{
-  "topic": "ONE primary topic from this EXACT list: Pricing, Payments, Location, Rider Behavior, Customer Support, Delivery, Product Quality, Delivery Experience, Cancellation, Extra Charges, Design, Account Blocked",
-  "sentiment": "positive or negative ONLY (no neutral)",
-  "summary": "a 1-2 sentence summary of the review",
-  "priority": "high (urgent/critical issue), medium (standard concern), or low (minor feedback/suggestion)"
-}
-
-IMPORTANT:
-- Topic MUST be one of the 12 options listed above (exact spelling)
-- Sentiment MUST be either "positive" or "negative" only
-- Priority MUST be "high", "medium", or "low"
-- Choose the SINGLE most relevant topic
-- Base priority on urgency and impact (payment issues, account blocks = high; delivery delays = medium/high; UI suggestions = low)`;
-
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${openaiApiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-        temperature: 0.3,
-        max_tokens: 200,
-      }),
+    const { data, error } = await supabaseClient.rpc("analyze_review_text", {
+      review_text: review.review_text,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenAI API error: ${response.status} ${errorText}`);
+    if (error) {
+      throw new Error(`Database analysis error: ${error.message}`);
     }
-
-    const data = await response.json();
-    const content = data.choices[0]?.message?.content;
-
-    if (!content) {
-      throw new Error("No response from OpenAI");
-    }
-
-    const tagging = JSON.parse(content);
 
     if (
-      !tagging.topic ||
-      !VALID_TOPICS.includes(tagging.topic) ||
-      !["positive", "negative"].includes(tagging.sentiment) ||
-      !tagging.summary ||
-      !["high", "medium", "low"].includes(tagging.priority)
+      !data.topic ||
+      !VALID_TOPICS.includes(data.topic) ||
+      !["positive", "negative"].includes(data.sentiment) ||
+      !data.summary ||
+      !["high", "medium", "low"].includes(data.priority)
     ) {
-      throw new Error("Invalid response structure from OpenAI");
+      throw new Error("Invalid response structure from analysis function");
     }
 
     return {
       row_id: review.row_id,
-      topic: tagging.topic,
-      sentiment: tagging.sentiment,
-      summary: tagging.summary,
-      priority: tagging.priority,
+      topic: data.topic,
+      sentiment: data.sentiment,
+      summary: data.summary,
+      priority: data.priority,
       success: true,
     };
   } catch (error) {
@@ -125,7 +82,11 @@ IMPORTANT:
   }
 }
 
-async function processInChunks<T>(items: T[], chunkSize: number, processor: (item: T) => Promise<any>): Promise<any[]> {
+async function processInChunks<T>(
+  items: T[],
+  chunkSize: number,
+  processor: (item: T) => Promise<any>
+): Promise<any[]> {
   const results = [];
   for (let i = 0; i < items.length; i += chunkSize) {
     const chunk = items.slice(i, i + chunkSize);
@@ -156,17 +117,6 @@ Deno.serve(async (req: Request) => {
         },
       }
     );
-
-    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!openaiApiKey) {
-      return new Response(
-        JSON.stringify({ error: "OPENAI_API_KEY not configured" }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
 
     const { data: topics } = await supabaseClient
       .from("topics")
@@ -202,7 +152,7 @@ Deno.serve(async (req: Request) => {
     const results = await processInChunks(
       reviews as Review[],
       50,
-      (review) => processReviewWithOpenAI(review, openaiApiKey)
+      (review) => processReviewWithDatabase(review, supabaseClient)
     );
 
     const successfulResults = results.filter(r => r.success);
