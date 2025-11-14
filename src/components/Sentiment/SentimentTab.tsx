@@ -19,8 +19,9 @@ const SentimentTab = () => {
 
       setStateData(regions);
 
-      const weeklyScores = sentimentTrend.slice(-7).map((item) => ({
-        week: new Date(item.date).toLocaleDateString('en-US', { weekday: 'short' }),
+      // Show last 14 days for better trend visualization
+      const weeklyScores = sentimentTrend.slice(-14).map((item) => ({
+        week: new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         score: item.sentiment,
       }));
 
@@ -94,7 +95,7 @@ const SentimentTab = () => {
 
           <div>
             <h3 className="text-sm font-semibold text-gray-900 mb-4">
-              Net Sentiment Score (Week-over-Week)
+              Net Sentiment Score (Daily Trend)
             </h3>
             {weeklyData.length > 0 ? (
               <div className="h-64 relative">

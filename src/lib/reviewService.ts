@@ -236,10 +236,17 @@ export const reviewService = {
   },
 
   async getSentimentTrend(): Promise<Array<{ date: string; sentiment: number }>> {
+    // Get last 30 days of data for trend visualization
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 30);
+    const dateStr = startDate.toISOString().split('T')[0];
+
     const { data: reviews } = await supabase
       .from('Reviews List')
       .select('fdb_date, sentiment')
-      .not('sentiment', 'is', null);
+      .gte('fdb_date', dateStr)
+      .not('sentiment', 'is', null)
+      .order('fdb_date', { ascending: true });
 
     const dailyData: Record<string, { positive: number; negative: number }> = {};
 
