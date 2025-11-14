@@ -1,4 +1,4 @@
-import { LayoutDashboard, MessageSquare, Bell, Hash, TrendingUp, Settings } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Bell, Hash, TrendingUp, Settings, Bot } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
@@ -12,6 +12,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'topics', label: 'Topic Insights', icon: Hash },
     { id: 'sentiment', label: 'Sentiment Trends', icon: TrendingUp },
+    { id: 'chat', label: 'Chat Agent', icon: Bot },
     { id: 'admin', label: 'Process Reviews', icon: Settings },
   ];
 
