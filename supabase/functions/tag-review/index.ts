@@ -8,7 +8,7 @@ const corsHeaders = {
 
 interface TaggingResponse {
   topic: string;
-  sentiment: "positive" | "negative" | "neutral";
+  sentiment: "positive" | "negative";
   summary: string;
   priority: "high" | "medium" | "low";
 }
@@ -47,7 +47,22 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const prompt = `You are an AI assistant specialized in analyzing customer feedback for an e-commerce platform.
+    const validTopics = [
+      "Pricing",
+      "Payments",
+      "Location",
+      "Rider Behavior",
+      "Customer Support",
+      "Delivery",
+      "Product Quality",
+      "Delivery Experience",
+      "Cancellation",
+      "Extra Charges",
+      "Design",
+      "Account Blocked"
+    ];
+
+    const prompt = `You are an AI assistant specialized in analyzing customer feedback for a delivery/e-commerce platform.
 
 Analyze the following customer review and provide structured output:
 
@@ -55,17 +70,18 @@ Review: "${reviewText}"
 
 Provide your response in valid JSON format ONLY (no additional text before or after) with exactly these fields:
 {
-  "topic": "main topic/category (e.g., Delivery, Product Quality, Customer Support, Payment, App Performance, Pricing, UI/UX, Availability)",
-  "sentiment": "positive, negative, or neutral",
+  "topic": "ONE primary topic from this EXACT list: Pricing, Payments, Location, Rider Behavior, Customer Support, Delivery, Product Quality, Delivery Experience, Cancellation, Extra Charges, Design, Account Blocked",
+  "sentiment": "positive or negative ONLY (no neutral)",
   "summary": "a 1-2 sentence summary of the review",
-  "priority": "high (urgent issue), medium (standard concern), or low (minor feedback)"
+  "priority": "high (urgent/critical issue), medium (standard concern), or low (minor feedback/suggestion)"
 }
 
-Based on:
-- Topic: Identify the primary subject of the feedback
-- Sentiment: Analyze the emotional tone
-- Summary: Create a concise summary
-- Priority: Assess urgency (high for critical issues, medium for standard complaints, low for suggestions)`;
+IMPORTANT:
+- Topic MUST be one of the 12 options listed above (exact spelling)
+- Sentiment MUST be either "positive" or "negative" only
+- Priority MUST be "high", "medium", or "low"
+- Choose the SINGLE most relevant topic
+- Base priority on urgency and impact (payment issues, account blocks = high; delivery delays = medium/high; UI suggestions = low)`;
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -119,7 +135,8 @@ Based on:
     // Validate response structure
     if (
       !tagging.topic ||
-      !["positive", "negative", "neutral"].includes(tagging.sentiment) ||
+      !validTopics.includes(tagging.topic) ||
+      !["positive", "negative"].includes(tagging.sentiment) ||
       !tagging.summary ||
       !["high", "medium", "low"].includes(tagging.priority)
     ) {
@@ -127,6 +144,7 @@ Based on:
         JSON.stringify({
           error: "Invalid response structure from OpenAI",
           received: tagging,
+          validTopics,
         }),
         {
           status: 400,
@@ -135,18 +153,12 @@ Based on:
       );
     }
 
-    // Convert priority to score
-    const priorityScore = { high: 5, medium: 3, low: 1 }[
-      tagging.priority
-    ] as number;
-
     return new Response(
       JSON.stringify({
         topic: tagging.topic,
         sentiment: tagging.sentiment,
         summary: tagging.summary,
         priority: tagging.priority,
-        priorityScore,
       }),
       {
         status: 200,

@@ -1,14 +1,33 @@
-const SentimentDonut = () => {
-  const data = {
-    positive: 68,
-    neutral: 22,
-    negative: 10,
-  };
+import { useState, useEffect } from 'react';
+import { reviewService } from '../../lib/reviewService';
 
-  const total = data.positive + data.neutral + data.negative;
-  const positivePercentage = (data.positive / total) * 100;
-  const neutralPercentage = (data.neutral / total) * 100;
-  const negativePercentage = (data.negative / total) * 100;
+const SentimentDonut = () => {
+  const [data, setData] = useState<{ positive: number; negative: number } | null>(null);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const metrics = await reviewService.getDashboardMetrics(7);
+        setData(metrics.sentimentDistribution);
+      } catch (error) {
+        console.error('Failed to load sentiment data:', error);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  if (!data) {
+    return (
+      <div className="bg-white rounded-2xl p-6 border border-gray-200 h-full flex items-center justify-center">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    );
+  }
+
+  const total = data.positive + data.negative;
+  const positivePercentage = total > 0 ? (data.positive / total) * 100 : 50;
+  const negativePercentage = total > 0 ? (data.negative / total) * 100 : 50;
 
   return (
     <div className="bg-white rounded-2xl p-6 border border-gray-200 h-full">
@@ -31,20 +50,10 @@ const SentimentDonut = () => {
               cy="50"
               r="40"
               fill="none"
-              stroke="#EAB308"
-              strokeWidth="20"
-              strokeDasharray={`${neutralPercentage * 2.51} ${(100 - neutralPercentage) * 2.51}`}
-              strokeDashoffset={`-${negativePercentage * 2.51}`}
-            />
-            <circle
-              cx="50"
-              cy="50"
-              r="40"
-              fill="none"
               stroke="#22C55E"
               strokeWidth="20"
               strokeDasharray={`${positivePercentage * 2.51} ${(100 - positivePercentage) * 2.51}`}
-              strokeDashoffset={`-${(negativePercentage + neutralPercentage) * 2.51}`}
+              strokeDashoffset={`-${negativePercentage * 2.51}`}
             />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
@@ -61,15 +70,7 @@ const SentimentDonut = () => {
               <div className="w-3 h-3 rounded-full bg-green-500"></div>
               <span className="text-sm font-medium text-gray-700">Positive</span>
             </div>
-            <span className="text-sm font-semibold text-gray-900">{data.positive}%</span>
-          </div>
-
-          <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-xl">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-              <span className="text-sm font-medium text-gray-700">Neutral</span>
-            </div>
-            <span className="text-sm font-semibold text-gray-900">{data.neutral}%</span>
+            <span className="text-sm font-semibold text-gray-900">{positivePercentage.toFixed(0)}%</span>
           </div>
 
           <div className="flex items-center justify-between p-3 bg-red-50 rounded-xl">
@@ -77,7 +78,7 @@ const SentimentDonut = () => {
               <div className="w-3 h-3 rounded-full bg-red-500"></div>
               <span className="text-sm font-medium text-gray-700">Negative</span>
             </div>
-            <span className="text-sm font-semibold text-gray-900">{data.negative}%</span>
+            <span className="text-sm font-semibold text-gray-900">{negativePercentage.toFixed(0)}%</span>
           </div>
         </div>
       </div>

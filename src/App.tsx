@@ -6,6 +6,7 @@ import ReviewsTab from './components/Reviews/ReviewsTab';
 import NotificationsTab from './components/Notifications/NotificationsTab';
 import TopicsTab from './components/Topics/TopicsTab';
 import SentimentTab from './components/Sentiment/SentimentTab';
+import BulkProcessingPanel from './components/Admin/BulkProcessingPanel';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -22,6 +23,8 @@ function App() {
         return <TopicsTab />;
       case 'sentiment':
         return <SentimentTab />;
+      case 'admin':
+        return <BulkProcessingPanel />;
       default:
         return <DashboardTab />;
     }

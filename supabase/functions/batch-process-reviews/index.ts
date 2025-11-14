@@ -1,0 +1,246 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+};
+
+interface Review {
+  row_id: number;
+  review_text: string;
+}
+
+interface TaggingResult {
+  row_id: number;
+  topic: string;
+  sentiment: "positive" | "negative";
+  summary: string;
+  priority: "high" | "medium" | "low";
+  success: boolean;
+  error?: string;
+}
+
+const VALID_TOPICS = [
+  "Pricing",
+  "Payments",
+  "Location",
+  "Rider Behavior",
+  "Customer Support",
+  "Delivery",
+  "Product Quality",
+  "Delivery Experience",
+  "Cancellation",
+  "Extra Charges",
+  "Design",
+  "Account Blocked"
+];
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders,
+    });
+  }
+
+  try {
+    const { batchSize = 50, offset = 0 } = await req.json();
+
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
+
+    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!openaiApiKey) {
+      return new Response(
+        JSON.stringify({ error: "OPENAI_API_KEY not configured" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const { data: reviews, error: fetchError } = await supabaseClient
+      .from("Reviews List")
+      .select("row_id, review_text")
+      .or("processing_status.eq.pending,processing_status.is.null")
+      .not("review_text", "is", null)
+      .range(offset, offset + batchSize - 1);
+
+    if (fetchError) {
+      throw new Error(`Failed to fetch reviews: ${fetchError.message}`);
+    }
+
+    if (!reviews || reviews.length === 0) {
+      return new Response(
+        JSON.stringify({
+          message: "No pending reviews to process",
+          processed: 0,
+          total: 0,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const results: TaggingResult[] = [];
+
+    for (const review of reviews as Review[]) {
+      try {
+        const prompt = `You are an AI assistant specialized in analyzing customer feedback for a delivery/e-commerce platform.
+
+Analyze the following customer review and provide structured output:
+
+Review: "${review.review_text}"
+
+Provide your response in valid JSON format ONLY (no additional text before or after) with exactly these fields:
+{
+  "topic": "ONE primary topic from this EXACT list: Pricing, Payments, Location, Rider Behavior, Customer Support, Delivery, Product Quality, Delivery Experience, Cancellation, Extra Charges, Design, Account Blocked",
+  "sentiment": "positive or negative ONLY (no neutral)",
+  "summary": "a 1-2 sentence summary of the review",
+  "priority": "high (urgent/critical issue), medium (standard concern), or low (minor feedback/suggestion)"
+}
+
+IMPORTANT:
+- Topic MUST be one of the 12 options listed above (exact spelling)
+- Sentiment MUST be either "positive" or "negative" only
+- Priority MUST be "high", "medium", or "low"
+- Choose the SINGLE most relevant topic
+- Base priority on urgency and impact (payment issues, account blocks = high; delivery delays = medium/high; UI suggestions = low)`;
+
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${openaiApiKey}`,
+          },
+          body: JSON.stringify({
+            model: "gpt-3.5-turbo",
+            messages: [
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+            temperature: 0.3,
+            max_tokens: 200,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`OpenAI API error: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        const content = data.choices[0]?.message?.content;
+
+        if (!content) {
+          throw new Error("No response from OpenAI");
+        }
+
+        const tagging = JSON.parse(content);
+
+        if (
+          !tagging.topic ||
+          !VALID_TOPICS.includes(tagging.topic) ||
+          !["positive", "negative"].includes(tagging.sentiment) ||
+          !tagging.summary ||
+          !["high", "medium", "low"].includes(tagging.priority)
+        ) {
+          throw new Error("Invalid response structure from OpenAI");
+        }
+
+        const { data: topicData } = await supabaseClient
+          .from("topics")
+          .select("id")
+          .eq("name", tagging.topic)
+          .single();
+
+        if (topicData) {
+          const { error: updateError } = await supabaseClient
+            .from("Reviews List")
+            .update({
+              topic_id: topicData.id,
+              sentiment: tagging.sentiment,
+              priority: tagging.priority,
+              tags: [tagging.topic],
+              processing_status: "completed",
+              processed_at: new Date().toISOString(),
+            })
+            .eq("row_id", review.row_id);
+
+          if (updateError) {
+            throw new Error(`Failed to update review: ${updateError.message}`);
+          }
+        }
+
+        results.push({
+          row_id: review.row_id,
+          topic: tagging.topic,
+          sentiment: tagging.sentiment,
+          summary: tagging.summary,
+          priority: tagging.priority,
+          success: true,
+        });
+      } catch (error) {
+        results.push({
+          row_id: review.row_id,
+          topic: "",
+          sentiment: "negative",
+          summary: "",
+          priority: "medium",
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+
+        await supabaseClient
+          .from("Reviews List")
+          .update({
+            processing_status: "failed",
+          })
+          .eq("row_id", review.row_id);
+      }
+    }
+
+    const successCount = results.filter((r) => r.success).length;
+    const failedCount = results.filter((r) => !r.success).length;
+
+    return new Response(
+      JSON.stringify({
+        message: "Batch processing completed",
+        processed: reviews.length,
+        successful: successCount,
+        failed: failedCount,
+        results,
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  } catch (error) {
+    console.error("Error:", error);
+    return new Response(
+      JSON.stringify({
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : String(error),
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  }
+});

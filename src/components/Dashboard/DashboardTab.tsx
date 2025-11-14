@@ -1,43 +1,69 @@
+import { useState, useEffect } from 'react';
 import { MessageSquare, AlertTriangle, TrendingUp, Hash, MapPin } from 'lucide-react';
 import MetricCard from '../MetricCard';
 import SentimentLineChart from './SentimentLineChart';
 import SentimentDonut from './SentimentDonut';
 import TopTopicsBar from './TopTopicsBar';
 import AlertsPanel from './AlertsPanel';
+import { reviewService, DashboardMetrics } from '../../lib/reviewService';
 
 const DashboardTab = () => {
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadMetrics = async () => {
+      try {
+        const data = await reviewService.getDashboardMetrics(7);
+        setMetrics(data);
+      } catch (error) {
+        console.error('Failed to load dashboard metrics:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadMetrics();
+  }, []);
+
+  if (loading || !metrics) {
+    return (
+      <div className="p-6 flex items-center justify-center h-96">
+        <div className="text-gray-500">Loading dashboard...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <MetricCard
           title="Total Reviews (This Week)"
-          value="12,847"
+          value={metrics.totalReviews.toLocaleString()}
           icon={MessageSquare}
-          trend={{ value: 12.5, isPositive: true }}
           color="#0B5FFF"
         />
         <MetricCard
           title="High-Priority Issues"
-          value="342"
+          value={metrics.highPriorityCount.toLocaleString()}
           icon={AlertTriangle}
-          trend={{ value: 8.2, isPositive: false }}
           color="#FF3B30"
         />
         <MetricCard
           title="Avg. Priority Score"
-          value="3.2"
+          value={metrics.avgPriorityScore.toFixed(1)}
           icon={TrendingUp}
           color="#34C759"
         />
         <MetricCard
           title="Most Mentioned Topic"
-          value="Delivery"
+          value={metrics.mostMentionedTopic}
           icon={Hash}
           color="#FF9500"
         />
         <MetricCard
           title="Worst Sentiment Region"
-          value="Mumbai"
+          value={metrics.worstSentimentRegion}
           icon={MapPin}
           color="#AF52DE"
         />
