@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { ChevronDown } from 'lucide-react';
 import { reviewService, RegionSentiment } from '../../lib/reviewService';
 
 const SentimentTab = () => {
@@ -14,14 +13,13 @@ const SentimentTab = () => {
   const loadData = async () => {
     try {
       const [regions, sentimentTrend] = await Promise.all([
-        reviewService.getRegionSentiment(30),
-        reviewService.getSentimentTrend(7),
+        reviewService.getRegionSentiment(),
+        reviewService.getSentimentTrend(),
       ]);
 
       setStateData(regions);
 
-      const weekLabels = ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5', 'Week 6', 'Week 7'];
-      const weeklyScores = sentimentTrend.map((item) => ({
+      const weeklyScores = sentimentTrend.slice(-7).map((item) => ({
         week: new Date(item.date).toLocaleDateString('en-US', { weekday: 'short' }),
         score: item.sentiment,
       }));
@@ -57,16 +55,6 @@ const SentimentTab = () => {
             <p className="text-sm text-gray-500 mt-1">
               Analyze sentiment patterns across states
             </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <select className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0B5FFF] pr-10">
-                <option>Last 30 days</option>
-                <option>Last 7 days</option>
-                <option>Last 90 days</option>
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={18} />
-            </div>
           </div>
         </div>
 

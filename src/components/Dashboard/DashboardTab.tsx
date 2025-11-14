@@ -14,7 +14,7 @@ const DashboardTab = () => {
   useEffect(() => {
     const loadMetrics = async () => {
       try {
-        const data = await reviewService.getDashboardMetrics(30);
+        const data = await reviewService.getDashboardMetrics();
         setMetrics(data);
       } catch (error) {
         console.error('Failed to load dashboard metrics:', error);
@@ -38,7 +38,7 @@ const DashboardTab = () => {
     <div className="p-6 space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <MetricCard
-          title="Total Reviews (Last 30 Days)"
+          title="Total Reviews"
           value={metrics.totalReviews.toLocaleString()}
           icon={MessageSquare}
           color="#0B5FFF"

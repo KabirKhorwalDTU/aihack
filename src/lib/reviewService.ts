@@ -8,8 +8,6 @@ export interface ReviewFilters {
   resolutionStatus?: 'resolved' | 'unresolved' | 'in_progress';
   state?: string;
   searchQuery?: string;
-  startDate?: string;
-  endDate?: string;
 }
 
 export interface PaginatedReviews {
@@ -91,14 +89,6 @@ export const reviewService = {
       query = query.ilike('review_text', `%${filters.searchQuery}%`);
     }
 
-    if (filters.startDate) {
-      query = query.gte('fdb_date', filters.startDate);
-    }
-
-    if (filters.endDate) {
-      query = query.lte('fdb_date', filters.endDate);
-    }
-
     query = query.eq('processing_status', 'completed');
 
     const start = (page - 1) * pageSize;
@@ -121,15 +111,10 @@ export const reviewService = {
     };
   },
 
-  async getDashboardMetrics(daysBack = 7): Promise<DashboardMetrics> {
-    const dateThreshold = new Date();
-    dateThreshold.setDate(dateThreshold.getDate() - daysBack);
-    const dateStr = dateThreshold.toISOString().split('T')[0];
-
+  async getDashboardMetrics(): Promise<DashboardMetrics> {
     const { data: reviews, error } = await supabase
       .from('Reviews List')
-      .select('*')
-      .gte('fdb_date', dateStr);
+      .select('*');
 
     if (error) {
       throw new Error(`Failed to fetch metrics: ${error.message}`);
@@ -174,17 +159,12 @@ export const reviewService = {
     };
   },
 
-  async getTopicAnalytics(daysBack = 7): Promise<TopicAnalytics[]> {
-    const dateThreshold = new Date();
-    dateThreshold.setDate(dateThreshold.getDate() - daysBack);
-    const dateStr = dateThreshold.toISOString().split('T')[0];
-
+  async getTopicAnalytics(): Promise<TopicAnalytics[]> {
     const { data: topics } = await supabase.from('topics').select('*').eq('is_active', true);
 
     const { data: reviews } = await supabase
       .from('Reviews List')
-      .select('*')
-      .gte('fdb_date', dateStr);
+      .select('*');
 
     const analytics: TopicAnalytics[] = [];
     const priorityMap = { high: 5, medium: 3, low: 1 };
@@ -223,15 +203,10 @@ export const reviewService = {
     return analytics.sort((a, b) => b.volume - a.volume);
   },
 
-  async getRegionSentiment(daysBack = 7): Promise<RegionSentiment[]> {
-    const dateThreshold = new Date();
-    dateThreshold.setDate(dateThreshold.getDate() - daysBack);
-    const dateStr = dateThreshold.toISOString().split('T')[0];
-
+  async getRegionSentiment(): Promise<RegionSentiment[]> {
     const { data: reviews } = await supabase
       .from('Reviews List')
       .select('state, sentiment')
-      .gte('fdb_date', dateStr)
       .not('state', 'is', null)
       .not('sentiment', 'is', null);
 
@@ -260,15 +235,10 @@ export const reviewService = {
       .sort((a, b) => b.totalCount - a.totalCount);
   },
 
-  async getSentimentTrend(days = 7): Promise<Array<{ date: string; sentiment: number }>> {
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-    const dateStr = startDate.toISOString().split('T')[0];
-
+  async getSentimentTrend(): Promise<Array<{ date: string; sentiment: number }>> {
     const { data: reviews } = await supabase
       .from('Reviews List')
       .select('fdb_date, sentiment')
-      .gte('fdb_date', dateStr)
       .not('sentiment', 'is', null);
 
     const dailyData: Record<string, { positive: number; negative: number }> = {};

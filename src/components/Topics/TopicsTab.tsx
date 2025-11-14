@@ -23,7 +23,7 @@ const TopicsTab = () => {
 
   const loadTopics = async () => {
     try {
-      const data = await reviewService.getTopicAnalytics(7);
+      const data = await reviewService.getTopicAnalytics();
       setTopics(data);
       if (data.length > 0 && !selectedTopic) {
         loadTopicDetails(data[0]);
@@ -128,7 +128,7 @@ const TopicsTab = () => {
               <div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">{selectedTopic.name}</h2>
                 <p className="text-sm text-gray-600">
-                  Analyzing {selectedTopic.volume} feedback entries from the last 7 days
+                  Analyzing {selectedTopic.volume} feedback entries
                 </p>
               </div>
               <div className="flex gap-2">
