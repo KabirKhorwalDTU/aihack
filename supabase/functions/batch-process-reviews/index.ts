@@ -18,6 +18,7 @@ interface TaggingResult {
   sentiment: "positive" | "negative";
   summary: string;
   priority: "high" | "medium" | "low";
+  topic_id?: number;
   success: boolean;
   error?: string;
 }
@@ -37,6 +38,103 @@ const VALID_TOPICS = [
   "Account Blocked"
 ];
 
+async function processReviewWithOpenAI(review: Review, openaiApiKey: string): Promise<TaggingResult> {
+  try {
+    const prompt = `You are an AI assistant specialized in analyzing customer feedback for a delivery/e-commerce platform.
+
+Analyze the following customer review and provide structured output:
+
+Review: "${review.review_text}"
+
+Provide your response in valid JSON format ONLY (no additional text before or after) with exactly these fields:
+{
+  "topic": "ONE primary topic from this EXACT list: Pricing, Payments, Location, Rider Behavior, Customer Support, Delivery, Product Quality, Delivery Experience, Cancellation, Extra Charges, Design, Account Blocked",
+  "sentiment": "positive or negative ONLY (no neutral)",
+  "summary": "a 1-2 sentence summary of the review",
+  "priority": "high (urgent/critical issue), medium (standard concern), or low (minor feedback/suggestion)"
+}
+
+IMPORTANT:
+- Topic MUST be one of the 12 options listed above (exact spelling)
+- Sentiment MUST be either "positive" or "negative" only
+- Priority MUST be "high", "medium", or "low"
+- Choose the SINGLE most relevant topic
+- Base priority on urgency and impact (payment issues, account blocks = high; delivery delays = medium/high; UI suggestions = low)`;
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${openaiApiKey}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        temperature: 0.3,
+        max_tokens: 200,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenAI API error: ${response.status} ${errorText}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content;
+
+    if (!content) {
+      throw new Error("No response from OpenAI");
+    }
+
+    const tagging = JSON.parse(content);
+
+    if (
+      !tagging.topic ||
+      !VALID_TOPICS.includes(tagging.topic) ||
+      !["positive", "negative"].includes(tagging.sentiment) ||
+      !tagging.summary ||
+      !["high", "medium", "low"].includes(tagging.priority)
+    ) {
+      throw new Error("Invalid response structure from OpenAI");
+    }
+
+    return {
+      row_id: review.row_id,
+      topic: tagging.topic,
+      sentiment: tagging.sentiment,
+      summary: tagging.summary,
+      priority: tagging.priority,
+      success: true,
+    };
+  } catch (error) {
+    return {
+      row_id: review.row_id,
+      topic: "",
+      sentiment: "negative",
+      summary: "",
+      priority: "medium",
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function processInChunks<T>(items: T[], chunkSize: number, processor: (item: T) => Promise<any>): Promise<any[]> {
+  const results = [];
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize);
+    const chunkResults = await Promise.all(chunk.map(processor));
+    results.push(...chunkResults);
+  }
+  return results;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -46,7 +144,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { batchSize = 50, offset = 0 } = await req.json();
+    const { batchSize = 1000, offset = 0 } = await req.json();
 
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -69,6 +167,12 @@ Deno.serve(async (req: Request) => {
         }
       );
     }
+
+    const { data: topics } = await supabaseClient
+      .from("topics")
+      .select("id, name");
+
+    const topicsMap = new Map(topics?.map(t => [t.name, t.id]) || []);
 
     const { data: reviews, error: fetchError } = await supabaseClient
       .from("Reviews List")
@@ -95,135 +199,58 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const results: TaggingResult[] = [];
+    const results = await processInChunks(
+      reviews as Review[],
+      50,
+      (review) => processReviewWithOpenAI(review, openaiApiKey)
+    );
 
-    for (const review of reviews as Review[]) {
-      try {
-        const prompt = `You are an AI assistant specialized in analyzing customer feedback for a delivery/e-commerce platform.
+    const successfulResults = results.filter(r => r.success);
+    const failedResults = results.filter(r => !r.success);
 
-Analyze the following customer review and provide structured output:
+    if (successfulResults.length > 0) {
+      const updates = successfulResults.map(result => ({
+        row_id: result.row_id,
+        topic_id: topicsMap.get(result.topic),
+        sentiment: result.sentiment,
+        priority: result.priority,
+        tags: [result.topic],
+        processing_status: "completed",
+        processed_at: new Date().toISOString(),
+      }));
 
-Review: "${review.review_text}"
-
-Provide your response in valid JSON format ONLY (no additional text before or after) with exactly these fields:
-{
-  "topic": "ONE primary topic from this EXACT list: Pricing, Payments, Location, Rider Behavior, Customer Support, Delivery, Product Quality, Delivery Experience, Cancellation, Extra Charges, Design, Account Blocked",
-  "sentiment": "positive or negative ONLY (no neutral)",
-  "summary": "a 1-2 sentence summary of the review",
-  "priority": "high (urgent/critical issue), medium (standard concern), or low (minor feedback/suggestion)"
-}
-
-IMPORTANT:
-- Topic MUST be one of the 12 options listed above (exact spelling)
-- Sentiment MUST be either "positive" or "negative" only
-- Priority MUST be "high", "medium", or "low"
-- Choose the SINGLE most relevant topic
-- Base priority on urgency and impact (payment issues, account blocks = high; delivery delays = medium/high; UI suggestions = low)`;
-
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${openaiApiKey}`,
-          },
-          body: JSON.stringify({
-            model: "gpt-3.5-turbo",
-            messages: [
-              {
-                role: "user",
-                content: prompt,
-              },
-            ],
-            temperature: 0.3,
-            max_tokens: 200,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`OpenAI API error: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        const content = data.choices[0]?.message?.content;
-
-        if (!content) {
-          throw new Error("No response from OpenAI");
-        }
-
-        const tagging = JSON.parse(content);
-
-        if (
-          !tagging.topic ||
-          !VALID_TOPICS.includes(tagging.topic) ||
-          !["positive", "negative"].includes(tagging.sentiment) ||
-          !tagging.summary ||
-          !["high", "medium", "low"].includes(tagging.priority)
-        ) {
-          throw new Error("Invalid response structure from OpenAI");
-        }
-
-        const { data: topicData } = await supabaseClient
-          .from("topics")
-          .select("id")
-          .eq("name", tagging.topic)
-          .single();
-
-        if (topicData) {
-          const { error: updateError } = await supabaseClient
-            .from("Reviews List")
-            .update({
-              topic_id: topicData.id,
-              sentiment: tagging.sentiment,
-              priority: tagging.priority,
-              tags: [tagging.topic],
-              processing_status: "completed",
-              processed_at: new Date().toISOString(),
-            })
-            .eq("row_id", review.row_id);
-
-          if (updateError) {
-            throw new Error(`Failed to update review: ${updateError.message}`);
-          }
-        }
-
-        results.push({
-          row_id: review.row_id,
-          topic: tagging.topic,
-          sentiment: tagging.sentiment,
-          summary: tagging.summary,
-          priority: tagging.priority,
-          success: true,
-        });
-      } catch (error) {
-        results.push({
-          row_id: review.row_id,
-          topic: "",
-          sentiment: "negative",
-          summary: "",
-          priority: "medium",
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-        });
-
+      for (const update of updates) {
         await supabaseClient
           .from("Reviews List")
           .update({
-            processing_status: "failed",
+            topic_id: update.topic_id,
+            sentiment: update.sentiment,
+            priority: update.priority,
+            tags: update.tags,
+            processing_status: update.processing_status,
+            processed_at: update.processed_at,
           })
-          .eq("row_id", review.row_id);
+          .eq("row_id", update.row_id);
       }
     }
 
-    const successCount = results.filter((r) => r.success).length;
-    const failedCount = results.filter((r) => !r.success).length;
+    if (failedResults.length > 0) {
+      for (const result of failedResults) {
+        await supabaseClient
+          .from("Reviews List")
+          .update({ processing_status: "failed" })
+          .eq("row_id", result.row_id);
+      }
+    }
 
     return new Response(
       JSON.stringify({
         message: "Batch processing completed",
         processed: reviews.length,
-        successful: successCount,
-        failed: failedCount,
-        results,
+        successful: successfulResults.length,
+        failed: failedResults.length,
+        offset: offset,
+        nextOffset: offset + batchSize,
       }),
       {
         status: 200,

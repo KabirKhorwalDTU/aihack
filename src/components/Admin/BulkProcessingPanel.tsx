@@ -31,15 +31,16 @@ const BulkProcessingPanel = () => {
     setLogs([]);
     setCurrentBatch(0);
 
-    const batchSize = 50;
+    const batchSize = 1000;
     let offset = 0;
     let hasMore = true;
     let totalProcessed = 0;
     let totalFailed = 0;
+    let shouldContinue = true;
 
-    while (hasMore && processing) {
+    while (hasMore && shouldContinue) {
       try {
-        addLog(`Processing batch ${currentBatch + 1}...`);
+        addLog(`Processing batch ${currentBatch + 1} (${batchSize} reviews, offset ${offset})...`);
         setCurrentBatch((prev) => prev + 1);
 
         const result = await reviewService.processBatch(batchSize, offset);
@@ -63,10 +64,10 @@ const BulkProcessingPanel = () => {
 
         offset += batchSize;
 
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        shouldContinue = processing;
       } catch (error) {
         addLog(`Error processing batch: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        hasMore = false;
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
 
@@ -186,7 +187,8 @@ const BulkProcessingPanel = () => {
             <p className="text-sm font-medium text-yellow-900 mb-1">Important Notes</p>
             <ul className="text-xs text-yellow-800 space-y-1 list-disc list-inside">
               <li>Processing uses OpenAI API and will incur costs based on usage</li>
-              <li>Each batch processes up to 50 reviews at a time</li>
+              <li>Each batch processes up to 1,000 reviews at a time with 50 parallel API calls</li>
+              <li>For 1 million reviews: ~1,000 batches, 30-60 minutes total</li>
               <li>You can stop processing at any time and resume later</li>
               <li>Failed reviews can be retried by running the process again</li>
             </ul>
