@@ -15,7 +15,8 @@ export interface N8nRequest {
 }
 
 export interface N8nResponse {
-  answer: string;
+  text?: string;
+  answer?: string;
 }
 
 // Use proxy in development, Supabase Edge Function in production
@@ -82,7 +83,7 @@ export const chatService = {
       }
 
       const data: N8nResponse = await response.json();
-      return data.answer || 'No answer received from the AI agent.';
+      return data.text || data.answer || 'No answer received from the AI agent.';
     } catch (error) {
       console.error('Error calling n8n webhook:', error);
       if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
