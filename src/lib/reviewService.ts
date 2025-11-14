@@ -319,7 +319,7 @@ export const reviewService = {
     return data || [];
   },
 
-  async processBatch(batchSize = 50, offset = 0): Promise<any> {
+  async processBatch(batchSize = 10000, offset = 0): Promise<any> {
     const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/batch-process-reviews`;
 
     const response = await fetch(apiUrl, {
