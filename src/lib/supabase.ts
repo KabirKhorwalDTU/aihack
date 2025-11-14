@@ -36,6 +36,17 @@ export interface Review {
   topic?: Topic;
 }
 
+export interface Team {
+  id: string;
+  name: string;
+  description: string;
+  specialization: string[];
+  priority_threshold: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Notification {
   id: string;
   type: 'alert' | 'review' | 'system' | 'mention' | 'update';
@@ -52,6 +63,14 @@ export interface Notification {
   threshold_value: number | null;
   actual_value: number | null;
   reviews_list_row_id: number | null;
+  assigned_team_id: string | null;
+  secondary_team_ids: string[];
+  agent_confidence: number | null;
+  agent_reasoning: string | null;
+  escalation_level: number;
+  escalated_from: string | null;
+  requires_human_review: boolean;
+  assigned_team?: Team;
 }
 
 export type Database = {
@@ -71,6 +90,11 @@ export type Database = {
         Row: Notification;
         Insert: Omit<Notification, 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Notification>;
+      };
+      teams: {
+        Row: Team;
+        Insert: Omit<Team, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Team>;
       };
     };
   };

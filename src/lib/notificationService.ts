@@ -11,7 +11,10 @@ export const notificationService = {
   async getNotifications(filters: NotificationFilters = {}): Promise<Notification[]> {
     let query = supabase
       .from('notifications')
-      .select('*')
+      .select(`
+        *,
+        assigned_team:teams!assigned_team_id(*)
+      `)
       .order('created_at', { ascending: false })
       .limit(50);
 

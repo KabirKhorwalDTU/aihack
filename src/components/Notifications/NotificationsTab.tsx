@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, TrendingUp, AlertCircle, ChevronDown } from 'lucide-react';
+import { AlertTriangle, TrendingUp, AlertCircle, ChevronDown, Users, AlertOctagon } from 'lucide-react';
 import { notificationService } from '../../lib/notificationService';
 import { Notification } from '../../lib/supabase';
 
@@ -179,6 +179,40 @@ const NotificationsTab = () => {
                             )}
                           </div>
                           <p className="text-sm text-gray-600 mb-3">{notification.description}</p>
+
+                          {notification.assigned_team && (
+                            <div className="mb-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Users size={14} className="text-blue-600" />
+                                <span className="text-xs font-semibold text-blue-900">Assigned Team:</span>
+                                <span className="text-xs font-medium text-blue-700">{notification.assigned_team.name}</span>
+                                {notification.agent_confidence && (
+                                  <span className="text-xs text-blue-600">({Math.round(notification.agent_confidence * 100)}% confidence)</span>
+                                )}
+                              </div>
+                              {notification.agent_reasoning && (
+                                <p className="text-xs text-blue-700 leading-relaxed">{notification.agent_reasoning}</p>
+                              )}
+                            </div>
+                          )}
+
+                          {notification.requires_human_review && (
+                            <div className="mb-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                              <div className="flex items-center gap-2 mb-1">
+                                <AlertOctagon size={14} className="text-amber-600" />
+                                <span className="text-xs font-semibold text-amber-900">Requires Human Review</span>
+                              </div>
+                              {notification.agent_reasoning && (
+                                <p className="text-xs text-amber-700 leading-relaxed">{notification.agent_reasoning}</p>
+                              )}
+                            </div>
+                          )}
+
+                          {notification.escalation_level > 0 && (
+                            <div className="mb-3 px-3 py-2 bg-red-50 rounded-lg border border-red-200">
+                              <span className="text-xs font-semibold text-red-900">Escalation Level {notification.escalation_level}</span>
+                            </div>
+                          )}
 
                           <div className="flex items-center gap-4 flex-wrap">
                             <div className="flex items-center gap-2">
