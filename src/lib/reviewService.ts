@@ -128,8 +128,7 @@ export const reviewService = {
 
     const { data: reviews, error } = await supabase
       .from('Reviews List')
-      .select('*, topic:topics(name)')
-      .eq('processing_status', 'completed')
+      .select('*')
       .gte('fdb_date', dateStr);
 
     if (error) {
@@ -144,31 +143,17 @@ export const reviewService = {
       reviews?.reduce((sum, r) => sum + (priorityMap[r.priority as keyof typeof priorityMap] || 3), 0) /
         (totalReviews || 1) || 0;
 
-    const topicCounts: Record<string, number> = {};
-    reviews?.forEach((r) => {
-      const topicName = (r.topic as any)?.name || 'Unknown';
-      topicCounts[topicName] = (topicCounts[topicName] || 0) + 1;
-    });
+    const reviewsWithTopics = reviews?.filter((r) => r.topic_id) || [];
+    const mostMentionedTopic = reviewsWithTopics.length > 0 ? `${reviewsWithTopics.length} tagged` : 'Not tagged yet';
 
-    const mostMentionedTopic =
-      Object.entries(topicCounts).sort(([, a], [, b]) => b - a)[0]?.[0] || 'N/A';
-
-    const stateSentiment: Record<string, { positive: number; negative: number }> = {};
+    const stateCounts: Record<string, number> = {};
     reviews?.forEach((r) => {
-      if (r.state && r.sentiment) {
-        if (!stateSentiment[r.state]) {
-          stateSentiment[r.state] = { positive: 0, negative: 0 };
-        }
-        stateSentiment[r.state][r.sentiment]++;
+      if (r.state) {
+        stateCounts[r.state] = (stateCounts[r.state] || 0) + 1;
       }
     });
 
-    const worstState = Object.entries(stateSentiment)
-      .map(([state, counts]) => ({
-        state,
-        negativePercent: (counts.negative / (counts.positive + counts.negative)) * 100,
-      }))
-      .sort((a, b) => b.negativePercent - a.negativePercent)[0];
+    const topState = Object.entries(stateCounts).sort(([, a], [, b]) => b - a)[0];
 
     const sentimentCounts = reviews?.reduce(
       (acc, r) => {
@@ -184,7 +169,7 @@ export const reviewService = {
       highPriorityCount,
       avgPriorityScore: Math.round(avgPriority * 10) / 10,
       mostMentionedTopic,
-      worstSentimentRegion: worstState?.state || 'N/A',
+      worstSentimentRegion: topState ? topState[0] : 'N/A',
       sentimentDistribution: sentimentCounts,
     };
   },
@@ -199,7 +184,6 @@ export const reviewService = {
     const { data: reviews } = await supabase
       .from('Reviews List')
       .select('*')
-      .eq('processing_status', 'completed')
       .gte('fdb_date', dateStr);
 
     const analytics: TopicAnalytics[] = [];
@@ -247,7 +231,6 @@ export const reviewService = {
     const { data: reviews } = await supabase
       .from('Reviews List')
       .select('state, sentiment')
-      .eq('processing_status', 'completed')
       .gte('fdb_date', dateStr)
       .not('state', 'is', null)
       .not('sentiment', 'is', null);
@@ -285,7 +268,6 @@ export const reviewService = {
     const { data: reviews } = await supabase
       .from('Reviews List')
       .select('fdb_date, sentiment')
-      .eq('processing_status', 'completed')
       .gte('fdb_date', dateStr)
       .not('sentiment', 'is', null);
 
@@ -376,7 +358,6 @@ export const reviewService = {
       .from('Reviews List')
       .select('row_id, review_text, sentiment, state')
       .eq('topic_id', topicId)
-      .eq('processing_status', 'completed')
       .not('review_text', 'is', null)
       .order('fdb_date', { ascending: false })
       .limit(limit);
@@ -393,7 +374,6 @@ export const reviewService = {
       .from('Reviews List')
       .select('state')
       .eq('topic_id', topicId)
-      .eq('processing_status', 'completed')
       .not('state', 'is', null);
 
     if (error) {
