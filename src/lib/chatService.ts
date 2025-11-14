@@ -61,6 +61,9 @@ export const chatService = {
         question: question,
       };
 
+      console.log('[Chat Service] Sending request to:', n8nWebhookUrl);
+      console.log('[Chat Service] Payload:', payload);
+
       // Add authorization header for production (Supabase Edge Function)
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -76,16 +79,65 @@ export const chatService = {
         body: JSON.stringify(payload),
       });
 
+      console.log('[Chat Service] Response status:', response.status);
+      console.log('[Chat Service] Response headers:', Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('N8N webhook error:', errorText);
+        console.error('[Chat Service] Error response:', errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data: N8nResponse = await response.json();
-      return data.text || data.answer || 'No answer received from the AI agent.';
+      const rawText = await response.text();
+      console.log('[Chat Service] Raw response text:', rawText);
+
+      let data: any;
+      try {
+        data = JSON.parse(rawText);
+        console.log('[Chat Service] Parsed response data:', data);
+      } catch (parseError) {
+        console.error('[Chat Service] Failed to parse JSON:', parseError);
+        throw new Error('Invalid JSON response from AI agent');
+      }
+
+      // Try multiple possible response structures
+      let answer = null;
+
+      // Direct text or answer field
+      if (data.text) {
+        answer = data.text;
+      } else if (data.answer) {
+        answer = data.answer;
+      }
+      // Response might be wrapped in a data field
+      else if (data.data?.text) {
+        answer = data.data.text;
+      } else if (data.data?.answer) {
+        answer = data.data.answer;
+      }
+      // Check if response is an array with first item containing text
+      else if (Array.isArray(data) && data.length > 0) {
+        if (data[0].text) {
+          answer = data[0].text;
+        } else if (data[0].answer) {
+          answer = data[0].answer;
+        }
+      }
+      // If data is a string itself
+      else if (typeof data === 'string') {
+        answer = data;
+      }
+
+      console.log('[Chat Service] Extracted answer:', answer);
+
+      if (!answer) {
+        console.error('[Chat Service] Could not extract answer from response structure');
+        return 'No answer received from the AI agent. Response structure: ' + JSON.stringify(data).substring(0, 200);
+      }
+
+      return answer;
     } catch (error) {
-      console.error('Error calling n8n webhook:', error);
+      console.error('[Chat Service] Error calling n8n webhook:', error);
       if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
         throw new Error('Network error: Unable to reach the AI agent. Please check your connection.');
       }
