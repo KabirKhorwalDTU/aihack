@@ -370,4 +370,44 @@ export const reviewService = {
 
     return count || 0;
   },
+
+  async getTopicReviews(topicId: string, limit = 5): Promise<any[]> {
+    const { data, error } = await supabase
+      .from('Reviews List')
+      .select('row_id, review_text, sentiment, state')
+      .eq('topic_id', topicId)
+      .eq('processing_status', 'completed')
+      .not('review_text', 'is', null)
+      .order('fdb_date', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new Error(`Failed to fetch topic reviews: ${error.message}`);
+    }
+
+    return data || [];
+  },
+
+  async getTopicTopState(topicId: string): Promise<string> {
+    const { data, error } = await supabase
+      .from('Reviews List')
+      .select('state')
+      .eq('topic_id', topicId)
+      .eq('processing_status', 'completed')
+      .not('state', 'is', null);
+
+    if (error) {
+      return 'N/A';
+    }
+
+    const stateCounts: Record<string, number> = {};
+    data?.forEach((r) => {
+      if (r.state) {
+        stateCounts[r.state] = (stateCounts[r.state] || 0) + 1;
+      }
+    });
+
+    const topState = Object.entries(stateCounts).sort(([, a], [, b]) => b - a)[0];
+    return topState ? topState[0] : 'N/A';
+  },
 };
