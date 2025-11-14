@@ -71,20 +71,20 @@ const BulkProcessingPanel = () => {
       }
     };
 
-    const batchQueue: Promise<any>[] = [];
     let noMoreReviews = false;
 
-    while (isRunning && !noMoreReviews) {
-      while (activeBatches < concurrentBatches && !noMoreReviews) {
+    // Keep processing until we run out of reviews
+    while (!noMoreReviews && processing) {
+      // Fill up all available slots with concurrent batches
+      const batchPromises: Promise<void>[] = [];
+
+      for (let i = 0; i < concurrentBatches; i++) {
         batchNumber++;
         const currentBatchNum = batchNumber;
         const currentOffset = offset;
         offset += batchSize;
-        activeBatches++;
 
         const batchPromise = processSingleBatch(currentOffset, currentBatchNum).then((result) => {
-          activeBatches--;
-
           if (result.processed > 0) {
             totalProcessed += result.processed;
             totalFailed += result.failed;
@@ -98,24 +98,14 @@ const BulkProcessingPanel = () => {
           if (!result.hasMore || result.processed === 0) {
             noMoreReviews = true;
           }
-
-          return result;
         });
 
-        batchQueue.push(batchPromise);
+        batchPromises.push(batchPromise);
       }
 
-      if (batchQueue.length > 0) {
-        const results = await Promise.race(batchQueue.map((p, idx) => p.then(r => ({ result: r, idx }))));
-        batchQueue.splice(results.idx, 1);
-      }
-
-      if (activeBatches === 0 && batchQueue.length === 0) {
-        break;
-      }
+      // Wait for all concurrent batches to complete before starting the next round
+      await Promise.all(batchPromises);
     }
-
-    await Promise.all(batchQueue);
 
     setProcessing(false);
     addLog(`Processing complete! Total: ${totalProcessed} processed, ${totalFailed} failed`);
