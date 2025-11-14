@@ -72,9 +72,10 @@ const BulkProcessingPanel = () => {
     };
 
     const batchQueue: Promise<any>[] = [];
+    let noMoreReviews = false;
 
-    while (isRunning) {
-      while (activeBatches < concurrentBatches && isRunning) {
+    while (isRunning && !noMoreReviews) {
+      while (activeBatches < concurrentBatches && !noMoreReviews) {
         batchNumber++;
         const currentBatchNum = batchNumber;
         const currentOffset = offset;
@@ -94,6 +95,10 @@ const BulkProcessingPanel = () => {
             setCurrentBatch(currentBatchNum);
           }
 
+          if (!result.hasMore || result.processed === 0) {
+            noMoreReviews = true;
+          }
+
           return result;
         });
 
@@ -103,18 +108,10 @@ const BulkProcessingPanel = () => {
       if (batchQueue.length > 0) {
         const results = await Promise.race(batchQueue.map((p, idx) => p.then(r => ({ result: r, idx }))));
         batchQueue.splice(results.idx, 1);
-
-        if (!results.result.hasMore || results.result.processed === 0) {
-          isRunning = false;
-        }
       }
 
       if (activeBatches === 0 && batchQueue.length === 0) {
-        isRunning = false;
-      }
-
-      if (!processing) {
-        isRunning = false;
+        break;
       }
     }
 
