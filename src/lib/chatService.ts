@@ -18,7 +18,19 @@ export interface N8nResponse {
   answer: string;
 }
 
-const n8nWebhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL;
+// Use proxy in development, Supabase Edge Function in production
+const getN8nUrl = () => {
+  if (import.meta.env.DEV) {
+    // Use Vite proxy in development
+    return '/api/n8n';
+  } else {
+    // Use Supabase Edge Function in production
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    return `${supabaseUrl}/functions/v1/chat-proxy`;
+  }
+};
+
+const n8nWebhookUrl = getN8nUrl();
 
 if (!n8nWebhookUrl) {
   console.error('N8N webhook URL is not configured');
@@ -48,15 +60,24 @@ export const chatService = {
         question: question,
       };
 
+      // Add authorization header for production (Supabase Edge Function)
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (!import.meta.env.DEV) {
+        headers['Authorization'] = `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`;
+      }
+
       const response = await fetch(n8nWebhookUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('N8N webhook error:', errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
@@ -64,11 +85,16 @@ export const chatService = {
       return data.answer || 'No answer received from the AI agent.';
     } catch (error) {
       console.error('Error calling n8n webhook:', error);
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        throw new Error('Network error: Unable to reach the AI agent. Please check your connection.');
+      }
       throw new Error('Failed to get response from the AI agent. Please try again.');
     }
   },
 
   generateMessageId(): string {
-    return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substr(2, 9);
+    return `msg_${timestamp}_${random}`;
   },
 };
