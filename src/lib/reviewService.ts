@@ -241,12 +241,19 @@ export const reviewService = {
     startDate.setDate(startDate.getDate() - 30);
     const dateStr = startDate.toISOString().split('T')[0];
 
-    const { data: reviews } = await supabase
+    const { data: reviews, error } = await supabase
       .from('Reviews List')
       .select('fdb_date, sentiment')
       .gte('fdb_date', dateStr)
       .not('sentiment', 'is', null)
       .order('fdb_date', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching sentiment trend:', error);
+      throw new Error(`Failed to fetch sentiment trend: ${error.message}`);
+    }
+
+    console.log('Sentiment trend raw data:', reviews?.slice(0, 5));
 
     const dailyData: Record<string, { positive: number; negative: number }> = {};
 
@@ -260,12 +267,19 @@ export const reviewService = {
       }
     });
 
-    return Object.entries(dailyData)
+    console.log('Daily data aggregated:', Object.keys(dailyData).length, 'days');
+    console.log('Sample:', Object.entries(dailyData).slice(0, 3));
+
+    const result = Object.entries(dailyData)
       .map(([date, counts]) => ({
         date,
         sentiment: Math.round((counts.positive / (counts.positive + counts.negative)) * 100),
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
+
+    console.log('Final sentiment trend result:', result.slice(0, 5));
+
+    return result;
   },
 
   async updateReviewStatus(
