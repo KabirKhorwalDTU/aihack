@@ -69,12 +69,10 @@ const BulkProcessingPanel = () => {
       }
     };
 
-    let noMoreReviews = false;
-
     // Keep processing until we run out of reviews
-    while (!noMoreReviews) {
+    while (true) {
       // Fill up all available slots with concurrent batches
-      const batchPromises: Promise<void>[] = [];
+      const batchPromises: Promise<{processed: number; failed: number; hasMore: boolean}>[] = [];
 
       for (let i = 0; i < concurrentBatches; i++) {
         batchNumber++;
@@ -93,16 +91,20 @@ const BulkProcessingPanel = () => {
             setCurrentBatch(currentBatchNum);
           }
 
-          if (!result.hasMore || result.processed === 0) {
-            noMoreReviews = true;
-          }
+          return result;
         });
 
         batchPromises.push(batchPromise);
       }
 
       // Wait for all concurrent batches to complete before starting the next round
-      await Promise.all(batchPromises);
+      const results = await Promise.all(batchPromises);
+
+      // Check if ALL batches reported no more reviews
+      const allEmpty = results.every(r => !r.hasMore || r.processed === 0);
+      if (allEmpty) {
+        break;
+      }
     }
 
     setProcessing(false);
