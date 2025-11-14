@@ -36,8 +36,6 @@ const BulkProcessingPanel = () => {
     let offset = 0;
     let totalProcessed = 0;
     let totalFailed = 0;
-    let isRunning = true;
-    let activeBatches = 0;
     let batchNumber = 0;
 
     const processSingleBatch = async (batchOffset: number, batchNum: number) => {
@@ -74,7 +72,7 @@ const BulkProcessingPanel = () => {
     let noMoreReviews = false;
 
     // Keep processing until we run out of reviews
-    while (!noMoreReviews && processing) {
+    while (!noMoreReviews) {
       // Fill up all available slots with concurrent batches
       const batchPromises: Promise<void>[] = [];
 
